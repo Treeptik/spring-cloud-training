@@ -14,6 +14,8 @@ import javax.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.hateoas.Resources;
 import org.springframework.http.HttpStatus;
@@ -27,19 +29,25 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.example.orders.NotificationClient;
 import com.example.orders.domain.Item;
 import com.example.orders.domain.Order;
 import com.example.orders.repository.OrderRepository;
 import com.example.orders.resource.ItemResource;
 import com.example.orders.resource.OrderResource;
-import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 
 @Controller
 @RequestMapping("/orders")
-public class OrderController {
+public class OrderController implements InitializingBean {
 	private static final Logger LOGGER = LoggerFactory.getLogger(OrderController.class);
 
+	@Autowired
+	private MetricRegistry metricRegistry;
+	
+	private Histogram orderTotal;
+	
     @Autowired
     private OrderRepository orderRepository;
 
@@ -89,7 +97,9 @@ public class OrderController {
     public ResponseEntity<?> create() {
         Order order = orderRepository.save(new Order());
 
+        MDC.put("Toto", "toto");
         LOGGER.info("Creating order {}", order.getId());
+        MDC.remove("Toto");
 
         itemNotificationClient.sendNotification("Yolo !");
         OrderResource resource = toResource(order);
@@ -131,6 +141,8 @@ public class OrderController {
     		}
     		
     		order.pay();
+    		
+    		orderTotal.update(order.getTotal());
     		
     		return ResponseEntity.ok().build();
     	});
@@ -204,6 +216,11 @@ public class OrderController {
 	
 	protected ResponseEntity<?> serverError() {
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+	}
+
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		orderTotal = metricRegistry.histogram(MetricRegistry.name(OrderController.class, "price", "total"));
 	}
 
 }

@@ -110,4 +110,10 @@ public class Order {
 		return Optional.ofNullable(items.get(itemName));
 	}
 
+	public long getTotal() {
+		return items.values().stream()
+				.mapToLong(item -> Math.round(item.getPrice() * item.getQuantity()))
+				.sum();
+	}
+
 }
